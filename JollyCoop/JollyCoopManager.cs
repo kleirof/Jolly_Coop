@@ -1,10 +1,7 @@
-﻿using BepInEx;
-using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEngine;
 using System.Collections;
 using Dungeonator;
-using HarmonyLib;
 using Gunfiguration;
 
 namespace JollyCoop
@@ -17,10 +14,19 @@ namespace JollyCoop
         internal const string itemDistribLockStr = "Item Distribution Lock";
         internal const string chestItemDoubledStr = "Chest Item Doubled";
         internal const string roomItemDropIncStr = "Room Item Drop Increace";
-        internal const string masterDoubledStr = "Master Doubled";
+        internal const string masterIndependentStr = "Master Round Independent";
         internal const string normalBossRewardDoubledStr = "Normal Boss Reward Doubled";
         internal const string extraEnemyHealthStr = "Extra Enemy Health";
         internal const string extraEnemyProjectileSpeedStr = "Extra Enemy Projectile Speed";
+
+        internal const string increasePlayerOneSpeedOutOfCombatStr = "Increase 1P Speed Out Of Combat";
+        internal const string increasePlayerTwoSpeedOutOfCombatStr = "Increase 2P Speed Out Of Combat";
+
+        internal const string playerOneVibrationStr = "1P Vibration";
+        internal const string playerTwoVibrationStr = "2P Vibration";
+
+        internal const string playerOneOutlineStr = "1P Outline";
+        internal const string playerTwoOutlineStr = "2P Outline";
 
         private const string m_onStr = "<color=#7FFFD4>on</color>";
         private const string m_offStr = "<color=#DAA520>off</color>";
@@ -69,6 +75,9 @@ namespace JollyCoop
             { "-0.02", 5 }
         };
 
+        private static List<string> outlineColorDisplayNames = new List<string>();
+        private static Dictionary<string, string> outlineColorLookupDict = new Dictionary<string, string>();
+
         public static float EnemyHealth
         {
             get
@@ -81,7 +90,7 @@ namespace JollyCoop
                     result += 0.1f;
                 if (gunfig.Enabled(roomItemDropIncStr))
                     result += 0.075f;
-                if (gunfig.Enabled(masterDoubledStr))
+                if (gunfig.Enabled(masterIndependentStr))
                     result += 0.1f;
                 if (gunfig.Enabled(normalBossRewardDoubledStr))
                     result += 0.025f;
@@ -102,7 +111,7 @@ namespace JollyCoop
                     result += 0.02f;
                 if (gunfig.Enabled(roomItemDropIncStr))
                     result += 0.005f;
-                if (gunfig.Enabled(masterDoubledStr))
+                if (gunfig.Enabled(masterIndependentStr))
                     result += 0.02f;
                 if (gunfig.Enabled(normalBossRewardDoubledStr))
                     result += 0.005f;
@@ -127,6 +136,8 @@ namespace JollyCoop
 
         internal static void InitializeGunfig()
         {
+            BuildDisplayAndLookupData();
+
             gunfig = Gunfig.Get("Jolly Coop".WithColor(Color.white));
 
             gunfig.AddLabel(GameManager.Options.CurrentLanguage == StringTableManager.GungeonSupportedLanguages.CHINESE ?
@@ -181,9 +192,9 @@ namespace JollyCoop
             gunfig.AddLabel(GameManager.Options.CurrentLanguage == StringTableManager.GungeonSupportedLanguages.CHINESE ?
                 "敌人弹速 += 0.02".WithColor(Color.green) :
                 "Enemy Projectile Speed += 0.02".WithColor(Color.green));
-            gunfig.AddToggle(key: masterDoubledStr, label: GameManager.Options.CurrentLanguage == StringTableManager.GungeonSupportedLanguages.CHINESE ?
-                "胜者之弹双倍" :
-                masterDoubledStr, enabled: true);
+            gunfig.AddToggle(key: masterIndependentStr, label: GameManager.Options.CurrentLanguage == StringTableManager.GungeonSupportedLanguages.CHINESE ?
+                "胜者之弹独立" :
+                masterIndependentStr, enabled: true);
             gunfig.AddLabel(" ");
             gunfig.AddLabel(GameManager.Options.CurrentLanguage == StringTableManager.GungeonSupportedLanguages.CHINESE ?
                 "敌人血量 += 0.025".WithColor(Color.green) :
@@ -220,12 +231,42 @@ namespace JollyCoop
                 callback: (optionKey, optionValue) => UpdateExtraEnemyProjectileSpeed(optionValue));
             UpdateExtraEnemyProjectileSpeed(null);
 
+            Gunfig coopIndependentSettings = gunfig.AddSubMenu(GameManager.Options.CurrentLanguage == StringTableManager.GungeonSupportedLanguages.CHINESE ?
+                "合作独立设置".WithColor(Color.yellow) :
+                "Coop Independent Settings".WithColor(Color.yellow));
+
+            coopIndependentSettings.AddToggle(key: increasePlayerOneSpeedOutOfCombatStr, label: GameManager.Options.CurrentLanguage == StringTableManager.GungeonSupportedLanguages.CHINESE ?
+                "非战斗模式下1P速度加快" :
+                increasePlayerOneSpeedOutOfCombatStr, enabled: true);
+            coopIndependentSettings.AddToggle(key: increasePlayerTwoSpeedOutOfCombatStr, label: GameManager.Options.CurrentLanguage == StringTableManager.GungeonSupportedLanguages.CHINESE ?
+                "非战斗模式下2P速度加快" :
+                increasePlayerTwoSpeedOutOfCombatStr, enabled: true);
+
+            coopIndependentSettings.AddToggle(key: playerOneVibrationStr, label: GameManager.Options.CurrentLanguage == StringTableManager.GungeonSupportedLanguages.CHINESE ?
+                "1P震动" :
+                playerOneVibrationStr, enabled: true);
+            coopIndependentSettings.AddToggle(key: playerTwoVibrationStr, label: GameManager.Options.CurrentLanguage == StringTableManager.GungeonSupportedLanguages.CHINESE ?
+                "2P震动" :
+                playerTwoVibrationStr, enabled: true);
+
+            coopIndependentSettings.AddScrollBox(key: playerOneOutlineStr, label: GameManager.Options.CurrentLanguage == StringTableManager.GungeonSupportedLanguages.CHINESE ?
+                "1P轮廓" :
+                playerOneOutlineStr, options: outlineColorDisplayNames, updateType: Gunfig.Update.OnConfirm,
+                callback: (optionKey, optionValue) => UpdatePlayerOneCursorModulation(optionValue));
+            coopIndependentSettings.AddScrollBox(key: playerTwoOutlineStr, label: GameManager.Options.CurrentLanguage == StringTableManager.GungeonSupportedLanguages.CHINESE ?
+                "2P轮廓" :
+                playerTwoOutlineStr, options: outlineColorDisplayNames, updateType: Gunfig.Update.OnConfirm,
+                callback: (optionKey, optionValue) => UpdatePlayerTwoCursorModulation(optionValue));
+
             ETGModConsole.Log("<color=#FFFACD>Enter 'jollycoop' to see Jolly Coop status. Switch options in Mod Config.</color>");
             ListStatus();
 
             ETGModConsole.Commands.AddGroup("jollycoop", args => ListStatus());
 
             ETGModConsole.Commands.GetGroup("jollycoop").AddUnit("status", args => ListStatus());
+
+            UpdatePlayerOneCursorModulation();
+            UpdatePlayerTwoCursorModulation();
         }
 
         private static void ListStatus()
@@ -234,7 +275,7 @@ namespace JollyCoop
             ETGModConsole.Log("   Item Distribution Lock " + (gunfig.Enabled(itemDistribLockStr) ? m_onStr : m_offStr));
             ETGModConsole.Log("   Chest Item Doubled " + (gunfig.Enabled(chestItemDoubledStr) ? m_onStr : m_offStr));
             ETGModConsole.Log("   Room Item Drop Increase " + (gunfig.Enabled(roomItemDropIncStr) ? m_onStr : m_offStr));
-            ETGModConsole.Log("   Master Doubled " + (gunfig.Enabled(masterDoubledStr) ? m_onStr : m_offStr));
+            ETGModConsole.Log("   Master Master Independent " + (gunfig.Enabled(masterIndependentStr) ? m_onStr : m_offStr));
             ETGModConsole.Log("   Normal Boss Reward Doubled " + (gunfig.Enabled(normalBossRewardDoubledStr) ? m_onStr : m_offStr));
             ETGModConsole.Log("   Extra Enemy Health " + extraEnemyHealthStrings[extraEnemyHealthIndex]);
             ETGModConsole.Log("   Extra Enemy Projectile Speed " + extraEnemyProjectileSpeedStrings[extraEnemyProjectileSpeedIndex]);
@@ -311,6 +352,51 @@ namespace JollyCoop
             c.BecomeRainbowChest();
             JollyCoopPatches.playerOneExclusiveChests.Add(c);
             yield break;
+        }
+
+        private static void UpdatePlayerOneCursorModulation(string value = null)
+        {
+            if (value == null)
+                value = gunfig.Value(playerOneOutlineStr);
+
+            if (!outlineColorLookupDict.TryGetValue(value, out var originalValue))
+                originalValue = null;
+
+            JollyCoopPatches.playerOneOutlineColor = OutlineColorManager.instance.GetOutlineColorByName(originalValue);
+        }
+
+        private static void UpdatePlayerTwoCursorModulation(string value = null)
+        {
+            if (value == null)
+                value = gunfig.Value(playerTwoOutlineStr);
+
+            if (!outlineColorLookupDict.TryGetValue(value, out var originalValue))
+                originalValue = null;
+
+            JollyCoopPatches.playerTwoOutlineColor = OutlineColorManager.instance.GetOutlineColorByName(originalValue);
+        }
+
+        public static void BuildDisplayAndLookupData()
+        {
+            outlineColorDisplayNames.Clear();
+            outlineColorLookupDict.Clear();
+
+            foreach (var originalName in OutlineColorManager.instance.OutlineColorNameList)
+            {
+                if (OutlineColorManager.instance.RegisteredOutlineColors.TryGetValue(originalName, out var item))
+                {
+                    string displayName = originalName.WithColor(item.color);
+
+                    outlineColorDisplayNames.Add(displayName);
+
+                    outlineColorLookupDict[displayName] = originalName;
+
+                    if (!outlineColorLookupDict.ContainsKey(originalName))
+                    {
+                        outlineColorLookupDict[originalName] = originalName;
+                    }
+                }
+            }
         }
     }
 }

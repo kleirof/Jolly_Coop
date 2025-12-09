@@ -10,11 +10,17 @@ namespace JollyCoop
     {
         public const string GUID = "kleirof.etg.jollycoop";
         public const string NAME = "Jolly Coop";
-        public const string VERSION = "1.3.2";
+        public const string VERSION = "1.3.4";
         public const string TEXT_COLOR = "#00CED1";
+
+        public static JollyCoopModule instance;
+
+        public OutlineColorManager outlineColorManager;
 
         public void Start()
         {
+            instance = this;
+
             ETGModMainBehaviour.WaitForGameManagerStart(GMStart);
 
             Harmony harmony = new Harmony(GUID);
@@ -25,6 +31,7 @@ namespace JollyCoop
         {
             Log($"{NAME} v{VERSION} started successfully.", TEXT_COLOR);
 
+            outlineColorManager = new OutlineColorManager();
             JollyCoopManager.InitializeGunfig();
         }
 

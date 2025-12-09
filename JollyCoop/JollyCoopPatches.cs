@@ -31,6 +31,9 @@ namespace JollyCoop
         internal static List<Chest> playerOneExclusiveChests = new List<Chest>();
         internal static List<Chest> playerTwoExclusiveChests = new List<Chest>();
 
+        public static Color playerOneOutlineColor = OutlineColorManager.defaultOutlineColor;
+        public static Color playerTwoOutlineColor = OutlineColorManager.defaultOutlineColor;
+
         public static void EmitCall<T>(this ILCursor iLCursor, string methodName, Type[] parameters = null, Type[] generics = null)
         {
             MethodInfo methodInfo = AccessTools.Method(typeof(T), methodName, parameters, generics);
@@ -227,7 +230,7 @@ namespace JollyCoop
                 && GameManager.Instance.CurrentGameType == GameManager.GameType.COOP_2_PLAYER)
                     orig += IntVector2.Left;
 
-                if (JollyCoopManager.gunfig.Enabled(JollyCoopManager.jollyCoopOnStr) && JollyCoopManager.gunfig.Enabled(JollyCoopManager.masterDoubledStr)
+                if (JollyCoopManager.gunfig.Enabled(JollyCoopManager.jollyCoopOnStr) && JollyCoopManager.gunfig.Enabled(JollyCoopManager.masterIndependentStr)
                 && GameManager.Instance.Dungeon.BossMasteryTokenItemId >= 0
                 && GameManager.Instance.CurrentGameType == GameManager.GameType.COOP_2_PLAYER)
                 {
@@ -283,7 +286,7 @@ namespace JollyCoop
                 if (GameManager.Instance.CurrentGameType == GameManager.GameType.SINGLE_PLAYER)
                     return orig;
 
-                if (!JollyCoopManager.gunfig.Enabled(JollyCoopManager.jollyCoopOnStr) || !JollyCoopManager.gunfig.Enabled(JollyCoopManager.masterDoubledStr))
+                if (!JollyCoopManager.gunfig.Enabled(JollyCoopManager.jollyCoopOnStr) || !JollyCoopManager.gunfig.Enabled(JollyCoopManager.masterIndependentStr))
                     return orig;
 
                 if (playerTwoSpawnMasterFlags[0])
@@ -418,6 +421,7 @@ namespace JollyCoop
                 if (playerTwoSpawnMasterFlags[2])
                 {
                     playerTwoSpawnMasterFlags[2] = false;
+
                     addCount++;
                 }
 
@@ -444,6 +448,7 @@ namespace JollyCoop
                 if (playerTwoSpawnMasterFlags[3])
                 {
                     playerTwoSpawnMasterFlags[3] = false;
+
                     addCount++;
                 }
 
@@ -913,9 +918,13 @@ namespace JollyCoop
             public static void DamagedPrefix(PlayerController __instance)
             {
                 if (__instance == GameManager.Instance.PrimaryPlayer)
+                {
                     playerOneHasTakenDamageInThisRoom = true;
+                }
                 else
+                {
                     playerTwoHasTakenDamageInThisRoom = true;
+                }
             }
         }
 
@@ -1036,5 +1045,133 @@ namespace JollyCoop
                 SetFieldInEnumerator(selfObject, "sellPrice", (int)(sellPrice * JollyCoopManager.ItemRecyclingPrice));
             }
         }
+
+        [HarmonyPatch(typeof(PlayerController), nameof(PlayerController.Update))]
+        public class PlayerControllerUpdatePatchClass
+        {
+            [HarmonyILManipulator]
+            public static void PlayerControllerUpdatePatch(ILContext ctx)
+            {
+                ILCursor crs = new ILCursor(ctx);
+
+                if (crs.TryGotoNext(MoveType.After,
+                    x => x.MatchLdfld<GameOptions>("IncreaseSpeedOutOfCombat")))
+                {
+                    crs.Emit(OpCodes.Ldarg_0);
+                    crs.EmitCall<PlayerControllerUpdatePatchClass>(nameof(PlayerControllerUpdatePatchClass.PlayerControllerUpdatePatchCall));
+                }
+            }
+
+            private static bool PlayerControllerUpdatePatchCall(bool orig, PlayerController self)
+            {
+                if (GameManager.Instance.CurrentGameType != GameManager.GameType.COOP_2_PLAYER || !JollyCoopManager.gunfig.Enabled(JollyCoopManager.jollyCoopOnStr))
+                    return orig;
+
+                if (self.IsPrimaryPlayer)
+                    return JollyCoopManager.gunfig.Enabled(JollyCoopManager.increasePlayerOneSpeedOutOfCombatStr);
+                return JollyCoopManager.gunfig.Enabled(JollyCoopManager.increasePlayerTwoSpeedOutOfCombatStr);
+            }
+
+            [HarmonyPostfix]
+            public static void PlayerControllerUpdatePostfix(PlayerController __instance)
+            {
+                try
+                {
+                    if (GameManager.Instance.CurrentGameType == GameManager.GameType.COOP_2_PLAYER && JollyCoopManager.gunfig.Enabled(JollyCoopManager.jollyCoopOnStr))
+                    {
+                        if (!IsPlayerValid(__instance))
+                            return;
+                        Color targetColor = __instance.IsPrimaryPlayer ? playerOneOutlineColor : playerTwoOutlineColor;
+                        if (__instance.outlineColor == targetColor)
+                            return;
+                        var sprite = __instance?.sprite;
+                        if (sprite == null)
+                            return;
+                        SpriteOutlineManager.RemoveOutlineFromSprite(sprite, true);
+                        __instance.outlineColor = targetColor;
+                        SpriteOutlineManager.AddOutlineToSprite(sprite, __instance.outlineColor, 0.1f, 0f, (__instance.characterIdentity != PlayableCharacters.Eevee) ? SpriteOutlineManager.OutlineType.NORMAL : SpriteOutlineManager.OutlineType.EEVEE);
+                    } 
+                    else
+                    {
+                        if (!IsPlayerValid(__instance))
+                            return;
+                        Color targetColor = Color.black;
+                        if (__instance.outlineColor == targetColor)
+                            return;
+                        var sprite = __instance?.sprite;
+                        if (sprite == null)
+                            return;
+                        SpriteOutlineManager.RemoveOutlineFromSprite(sprite, true);
+                        if (__instance.IsGhost)
+                            return;
+                        __instance.outlineColor = targetColor;
+                        SpriteOutlineManager.AddOutlineToSprite(sprite, __instance.outlineColor, 0.1f, 0f, (__instance.characterIdentity != PlayableCharacters.Eevee) ? SpriteOutlineManager.OutlineType.NORMAL : SpriteOutlineManager.OutlineType.EEVEE);
+                    }
+                }
+                catch { }
+            }
+
+            private static bool IsPlayerValid(PlayerController player)
+            {
+                if (!player || player.IsGone)
+                {
+                    return false;
+                }
+                if (!player.specRigidbody.enabled || player.specRigidbody.GetPixelCollider(ColliderType.HitBox) == null)
+                {
+                    return false;
+                }
+                return true;
+            }
+        }
+
+        [HarmonyPatch(typeof(BraveInput), nameof(BraveInput.LateUpdate))]
+        public class BraveInputLateUpdatePatchClass
+        {
+            [HarmonyILManipulator]
+            public static void BraveInputLateUpdatePatch(ILContext ctx)
+            {
+                ILCursor crs = new ILCursor(ctx);
+
+                if (crs.TryGotoNext(MoveType.After,
+                    x => x.MatchLdfld<GameOptions>("RumbleEnabled")))
+                {
+                    crs.Emit(OpCodes.Ldarg_0);
+                    crs.EmitCall<BraveInputLateUpdatePatchClass>(nameof(BraveInputLateUpdatePatchClass.BraveInputLateUpdatePatchCall));
+                }
+            }
+
+            private static bool BraveInputLateUpdatePatchCall(bool orig, BraveInput self)
+            {
+                if (GameManager.Instance.CurrentGameType != GameManager.GameType.COOP_2_PLAYER || !JollyCoopManager.gunfig.Enabled(JollyCoopManager.jollyCoopOnStr))
+                    return orig;
+
+                if (self.m_playerID == 0)
+                    return JollyCoopManager.gunfig.Enabled(JollyCoopManager.playerOneVibrationStr);
+                return JollyCoopManager.gunfig.Enabled(JollyCoopManager.playerTwoVibrationStr);
+            }
+        }
+
+        [HarmonyPatch(typeof(PlayerController), nameof(PlayerController.HandleGunEquipInternal))]
+        public class HandleGunEquipInternalPatchClass
+        {
+            [HarmonyILManipulator]
+            public static void HandleGunEquipInternalPatch(ILContext ctx)
+            {
+                ILCursor crs = new ILCursor(ctx);
+
+                if (crs.TryGotoNext(MoveType.After,
+                    x => x.MatchLdfld<PlayerController>("outlineColor")))
+                {
+                    crs.EmitCall<HandleGunEquipInternalPatchClass>(nameof(HandleGunEquipInternalPatchClass.HandleGunEquipInternalPatchCall));
+                }
+            }
+
+            private static Color HandleGunEquipInternalPatchCall(Color orig)
+            {
+                return Color.black;
+            }
+        }
     }
 }
+
