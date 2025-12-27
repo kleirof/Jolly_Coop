@@ -69,7 +69,7 @@ namespace JollyCoop
         public class PresentItemPatchClass
         {
             [HarmonyILManipulator]
-            public static void Manipulator(ILContext ctx)
+            public static void PresentItemPatch(ILContext ctx)
             {
                 ILCursor crs = new ILCursor(ctx);
 
@@ -77,11 +77,11 @@ namespace JollyCoop
                     x => x.MatchCallvirt<GameStatsManager>("get_IsRainbowRun")))
                 {
                     crs.Emit(OpCodes.Ldarg_0);
-                    crs.EmitCall<PresentItemPatchClass>(nameof(PresentItemPatchClass.ExecuteInStateMachine));
+                    crs.EmitCall<PresentItemPatchClass>(nameof(PresentItemPatchClass.PresentItemPatchCall));
                 }
             }
 
-            private static void ExecuteInStateMachine(object stateMachine)
+            private static void PresentItemPatchCall(object stateMachine)
             {
                 Chest chest = GetFieldInEnumerator<Chest>(stateMachine, "this");
 
@@ -600,12 +600,8 @@ namespace JollyCoop
                     if (playerOneExclusivePickups.ContainsKey(__instance) && interactor == GameManager.Instance.PrimaryPlayer)
                         return false;
                 }
-
-                if (playerTwoExclusivePickups.ContainsKey(__instance))
-                    playerTwoExclusivePickups.Remove(__instance);
-
-                if (playerOneExclusivePickups.ContainsKey(__instance))
-                    playerOneExclusivePickups.Remove(__instance);
+                playerTwoExclusivePickups.Remove(__instance);
+                playerOneExclusivePickups.Remove(__instance);
 
                 return true;
             }
@@ -620,11 +616,8 @@ namespace JollyCoop
                 if (GameManager.Instance.CurrentGameType != GameManager.GameType.COOP_2_PLAYER)
                     return;
 
-                if (playerTwoExclusivePickups.ContainsKey(__instance))
-                    playerTwoExclusivePickups.Remove(__instance);
-
-                if (playerOneExclusivePickups.ContainsKey(__instance))
-                    playerOneExclusivePickups.Remove(__instance);
+                playerTwoExclusivePickups.Remove(__instance);
+                playerOneExclusivePickups.Remove(__instance);
             }
         }
 
@@ -666,12 +659,8 @@ namespace JollyCoop
                     if (playerOneExclusivePickups.ContainsKey(__instance) && interactor == GameManager.Instance.PrimaryPlayer)
                         return false;
                 }
-
-                if (playerTwoExclusivePickups.ContainsKey(__instance))
-                    playerTwoExclusivePickups.Remove(__instance);
-
-                if (playerOneExclusivePickups.ContainsKey(__instance))
-                    playerOneExclusivePickups.Remove(__instance);
+                playerTwoExclusivePickups.Remove(__instance);
+                playerOneExclusivePickups.Remove(__instance);
 
                 return true;
             }
@@ -686,11 +675,8 @@ namespace JollyCoop
                 if (GameManager.Instance.CurrentGameType != GameManager.GameType.COOP_2_PLAYER)
                     return;
 
-                if (playerTwoExclusivePickups.ContainsKey(__instance))
-                    playerTwoExclusivePickups.Remove(__instance);
-
-                if (playerOneExclusivePickups.ContainsKey(__instance))
-                    playerOneExclusivePickups.Remove(__instance);
+                playerTwoExclusivePickups.Remove(__instance);
+                playerOneExclusivePickups.Remove(__instance);
             }
         }
 
@@ -732,12 +718,8 @@ namespace JollyCoop
                     if (playerOneExclusivePickups.ContainsKey(__instance) && interactor == GameManager.Instance.PrimaryPlayer)
                         return false;
                 }
-
-                if (playerTwoExclusivePickups.ContainsKey(__instance))
-                    playerTwoExclusivePickups.Remove(__instance);
-
-                if (playerOneExclusivePickups.ContainsKey(__instance))
-                    playerOneExclusivePickups.Remove(__instance);
+                playerTwoExclusivePickups.Remove(__instance);
+                playerOneExclusivePickups.Remove(__instance);
 
                 return true;
             }
@@ -752,11 +734,8 @@ namespace JollyCoop
                 if (GameManager.Instance.CurrentGameType != GameManager.GameType.COOP_2_PLAYER)
                     return;
 
-                if (playerTwoExclusivePickups.ContainsKey(__instance))
-                    playerTwoExclusivePickups.Remove(__instance);
-
-                if (playerOneExclusivePickups.ContainsKey(__instance))
-                    playerOneExclusivePickups.Remove(__instance);
+                playerTwoExclusivePickups.Remove(__instance);
+                playerOneExclusivePickups.Remove(__instance);
             }
         }
 
@@ -883,12 +862,8 @@ namespace JollyCoop
                     if (playerOneExclusivePedestals.Contains(__instance) && player == GameManager.Instance.PrimaryPlayer)
                         return false;
                 }
-
-                if (playerTwoExclusivePedestals.Contains(__instance))
-                    playerTwoExclusivePedestals.Remove(__instance);
-
-                if (playerOneExclusivePedestals.Contains(__instance))
-                    playerOneExclusivePedestals.Remove(__instance);
+                playerTwoExclusivePedestals.Remove(__instance);
+                playerOneExclusivePedestals.Remove(__instance);
 
                 return true;
             }
@@ -931,6 +906,7 @@ namespace JollyCoop
 
                 playerTwoExclusiveChests.Remove(__instance);
                 playerOneExclusiveChests.Remove(__instance);
+                chestOriginalCount.Remove(__instance);
             }
 
             [HarmonyILManipulator]
