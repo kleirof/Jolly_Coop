@@ -312,38 +312,6 @@ namespace JollyCoop
             extraEnemyProjectileSpeedIndex = index;
         }
 
-        public static void AddItem(Chest c)
-        {
-            if (gunfig.Enabled(jollyCoopOnStr) && gunfig.Enabled(chestItemDoubledStr) && GameManager.Instance.CurrentGameType == GameManager.GameType.COOP_2_PLAYER)
-            {
-                int count = c.contents.Count;
-                for (int i = 0; i < count; i++)
-                {
-                    PickupObject pickupObject;
-                    if (c.contents[i].quality == PickupObject.ItemQuality.A || c.contents[i].quality == PickupObject.ItemQuality.B || c.contents[i].quality == PickupObject.ItemQuality.C || c.contents[i].quality == PickupObject.ItemQuality.D || c.contents[i].quality == PickupObject.ItemQuality.S)
-                    {
-                        RewardManager rewardManager = GameManager.Instance.RewardManager;
-                        GenericLootTable lootTable = c.contents[i] is Gun ? rewardManager.GunsLootTable : rewardManager.ItemsLootTable;
-                        pickupObject = rewardManager.GetItemForPlayer(GameManager.Instance.SecondaryPlayer, lootTable, c.contents[i].quality, null).GetComponent<PickupObject>();
-                        if (pickupObject == c.contents[i])
-                            pickupObject = UnityEngine.Object.Instantiate(c.contents[i]);
-                        c.contents.Add(pickupObject);
-                        JollyCoopPatches.playerOneExclusiveLoots.Add(pickupObject);
-                        JollyCoopPatches.playerTwoExclusiveLoots.Add(c.contents[i]);
-                    }
-                    else if (c.contents[i] is PassiveItem)
-                    {
-                        pickupObject = UnityEngine.Object.Instantiate(c.contents[i]);
-                        c.contents.Add(pickupObject);
-                        JollyCoopPatches.playerOneExclusiveLoots.Add(pickupObject);
-                        JollyCoopPatches.playerTwoExclusiveLoots.Add(c.contents[i]);
-                    }
-                    else if (!(c.contents[i] is KeyBulletPickup))
-                        c.contents.Add(c.contents[i]);
-                }
-            }
-        }
-
         public static IEnumerator SpawnChest(Vector3 v, RoomHandler room)
         {
             yield return new WaitForSeconds(0.45f);

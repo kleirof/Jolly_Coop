@@ -20,19 +20,18 @@ namespace JollyCoop
         internal static bool playerTwoHasGivenMasteryToken = false;
 
         internal static Dictionary<PickupObject, bool> playerOneExclusivePickups = new Dictionary<PickupObject, bool>();
-        internal static List<PickupObject> playerOneExclusiveLoots = new List<PickupObject>();
-
         internal static Dictionary<PickupObject, bool> playerTwoExclusivePickups = new Dictionary<PickupObject, bool>();
-        internal static List<PickupObject> playerTwoExclusiveLoots = new List<PickupObject>();
 
-        internal static List<RewardPedestal> playerOneExclusivePedestals = new List<RewardPedestal>();
-        internal static List<RewardPedestal> playerTwoExclusivePedestals = new List<RewardPedestal>();
+        internal static HashSet<RewardPedestal> playerOneExclusivePedestals = new HashSet<RewardPedestal>();
+        internal static HashSet<RewardPedestal> playerTwoExclusivePedestals = new HashSet<RewardPedestal>();
 
-        internal static List<Chest> playerOneExclusiveChests = new List<Chest>();
-        internal static List<Chest> playerTwoExclusiveChests = new List<Chest>();
+        internal static HashSet<Chest> playerOneExclusiveChests = new HashSet<Chest>();
+        internal static HashSet<Chest> playerTwoExclusiveChests = new HashSet<Chest>();
 
         public static Color playerOneOutlineColor = OutlineColorManager.defaultOutlineColor;
         public static Color playerTwoOutlineColor = OutlineColorManager.defaultOutlineColor;
+
+        internal static Dictionary<Chest, int> chestOriginalCount = new Dictionary<Chest, int>();
 
         public static void EmitCall<T>(this ILCursor iLCursor, string methodName, Type[] parameters = null, Type[] generics = null)
         {
@@ -66,68 +65,50 @@ namespace JollyCoop
             return true;
         }
 
-        [HarmonyPatch(typeof(Chest), nameof(Chest.Open))]
-        public class OpenPatchClass
+        [HarmonyPatch(typeof(Chest), nameof(Chest.PresentItem), MethodType.Enumerator)]
+        public class PresentItemPatchClass
         {
             [HarmonyILManipulator]
-            public static void OpenPatch(ILContext ctx)
+            public static void Manipulator(ILContext ctx)
             {
                 ILCursor crs = new ILCursor(ctx);
 
-                if (crs.TryGotoNext(MoveType.After,
-                    x => x.MatchCallvirt<PlayerController>("TriggerItemAcquisition")))
+                if (crs.TryGotoNext(MoveType.Before,
+                    x => x.MatchCallvirt<GameStatsManager>("get_IsRainbowRun")))
                 {
                     crs.Emit(OpCodes.Ldarg_0);
-                    crs.EmitCall<OpenPatchClass>(nameof(OpenPatchClass.OpenPatchCall));
+                    crs.EmitCall<PresentItemPatchClass>(nameof(PresentItemPatchClass.ExecuteInStateMachine));
                 }
             }
 
-            private static void OpenPatchCall(Chest self)
+            private static void ExecuteInStateMachine(object stateMachine)
             {
-                if (!self.IsRainbowChest)
-                    JollyCoopManager.AddItem(self);
+                Chest chest = GetFieldInEnumerator<Chest>(stateMachine, "this");
+
+                if (chest != null && !chest.IsRainbowChest)
+                    AddItem(chest);
             }
-        }
 
-        [HarmonyPatch(typeof(Chest), nameof(Chest.HandleSynergyGambleChest), MethodType.Enumerator)]
-        public class HandleSynergyGambleChestPatchClass
-        {
-            [HarmonyILManipulator]
-            public static void HandleSynergyGambleChestPatch(ILContext ctx)
+
+            public static void AddItem(Chest c)
             {
-                ILCursor crs = new ILCursor(ctx);
+                if (!JollyCoopManager.gunfig.Enabled(JollyCoopManager.jollyCoopOnStr) || !JollyCoopManager.gunfig.Enabled(JollyCoopManager.chestItemDoubledStr) || GameManager.Instance.CurrentGameType != GameManager.GameType.COOP_2_PLAYER)
+                    return;
 
-                if (crs.TryGotoNext(MoveType.After,
-                    x => x.MatchCallvirt<PlayerController>("TriggerItemAcquisition")))
+                int count = c.contents.Count;
+                chestOriginalCount[c] = count;
+                for (int i = 0; i < count; i++)
                 {
-                    crs.Emit(OpCodes.Ldarg_0);
-                    crs.EmitCall<HandleSynergyGambleChestPatchClass>(nameof(HandleSynergyGambleChestPatchClass.HandleSynergyGambleChestPatchCall));
-                }
-            }
-
-            private static void HandleSynergyGambleChestPatchCall(object selfObject)
-            {
-                JollyCoopManager.AddItem(GetFieldInEnumerator<Chest>(selfObject, "this"));
-            }
-        }
-
-        [HarmonyPatch(typeof(Chest), nameof(Chest.OnBroken))]
-        public class OnBrokenPatchClass
-        {
-            [HarmonyILManipulator]
-            public static void OnBrokenPatch(ILContext ctx)
-            {
-                ILCursor crs = new ILCursor(ctx);
-
-                for (int i = 0; i < 6; ++i)
-                {
-                    if (crs.TryGotoNext(MoveType.Before,
-                        x => x.MatchCall<Chest>("PresentItem")))
+                    PickupObject pickupObject;
+                    if (c.contents[i].quality == PickupObject.ItemQuality.A || c.contents[i].quality == PickupObject.ItemQuality.B || c.contents[i].quality == PickupObject.ItemQuality.C || c.contents[i].quality == PickupObject.ItemQuality.D || c.contents[i].quality == PickupObject.ItemQuality.S)
                     {
-                        crs.Emit(OpCodes.Ldarg_0);
-                        crs.EmitCall<JollyCoopManager>(nameof(JollyCoopManager.AddItem));
+                        RewardManager rewardManager = GameManager.Instance.RewardManager;
+                        GenericLootTable lootTable = c.contents[i] is Gun ? rewardManager.GunsLootTable : rewardManager.ItemsLootTable;
+                        pickupObject = rewardManager.GetItemForPlayer(GameManager.Instance.SecondaryPlayer, lootTable, c.contents[i].quality, null).GetComponent<PickupObject>();
+                        c.contents.Add(pickupObject);
                     }
-                    crs.Index += 3;
+                    else if (!(c.contents[i] is KeyBulletPickup))
+                        c.contents.Add(c.contents[i]);
                 }
             }
         }
@@ -577,48 +558,6 @@ namespace JollyCoop
             }
         }
 
-        [HarmonyPatch(typeof(LootEngine), nameof(LootEngine.SpewLoot), new Type[] { typeof(List<GameObject>), typeof(Vector3) })]
-        public class SpewLootPatchClass
-        {
-            [HarmonyILManipulator]
-            public static void SpewLootPatch(ILContext ctx)
-            {
-                ILCursor crs = new ILCursor(ctx);
-
-                if (crs.TryGotoNext(MoveType.After,
-                    x => x.MatchStloc(5)
-                    ))
-                {
-                    crs.Emit(OpCodes.Ldloc_3);
-                    crs.Emit(OpCodes.Ldloc_S, (byte)5);
-                    crs.Emit(OpCodes.Ldarg_0);
-                    crs.EmitCall<SpewLootPatchClass>(nameof(SpewLootPatchClass.SpewLootPatchCall));
-                }
-            }
-
-            private static void SpewLootPatchCall(int index, GameObject gameObject, List<GameObject> list)
-            {
-                if (GameManager.Instance.CurrentGameType != GameManager.GameType.COOP_2_PLAYER)
-                    return;
-
-                if (!JollyCoopManager.gunfig.Enabled(JollyCoopManager.jollyCoopOnStr) || !JollyCoopManager.gunfig.Enabled(JollyCoopManager.itemDistribLockStr))
-                    return;
-
-                if (playerOneExclusiveLoots.Contains(list[index].gameObject.GetComponent<PickupObject>()))
-                {
-                    playerOneExclusiveLoots.Remove(list[index].gameObject.GetComponent<PickupObject>());
-                    playerOneExclusivePickups.Add(gameObject.GetComponent<PickupObject>(),
-                        GameManager.Instance.SecondaryPlayer.CurrentRoom == GameManager.Instance.Dungeon.data.GetAbsoluteRoomFromPosition(gameObject.transform.position.IntXY(VectorConversions.Round)));
-                }
-                if (playerTwoExclusiveLoots.Contains(list[index].gameObject.GetComponent<PickupObject>()))
-                {
-                    playerTwoExclusiveLoots.Remove(list[index].gameObject.GetComponent<PickupObject>());
-                    playerTwoExclusivePickups.Add(gameObject.GetComponent<PickupObject>(),
-                        GameManager.Instance.PrimaryPlayer.CurrentRoom == GameManager.Instance.Dungeon.data.GetAbsoluteRoomFromPosition(gameObject.transform.position.IntXY(VectorConversions.Round)));
-                }
-            }
-        }
-
         [HarmonyPatch(typeof(GameManager), nameof(GameManager.IsLoadingLevel), MethodType.Setter)]
         public class Set_IsLoadingLevelPatchClass
         {
@@ -629,12 +568,11 @@ namespace JollyCoop
                 {
                     playerOneExclusivePickups.Clear();
                     playerTwoExclusivePickups.Clear();
-                    playerOneExclusiveLoots.Clear();
-                    playerTwoExclusiveLoots.Clear();
                     playerOneExclusivePedestals.Clear();
                     playerTwoExclusivePedestals.Clear();
                     playerOneExclusiveChests.Clear();
                     playerTwoExclusiveChests.Clear();
+                    chestOriginalCount.Clear();
                     playerOneHasGivenMasteryToken = false;
                     playerTwoHasGivenMasteryToken = false;
                     playerOneHasTakenDamageInThisRoom = false;
@@ -981,34 +919,88 @@ namespace JollyCoop
         [HarmonyPatch(typeof(Chest), nameof(Chest.SpewContentsOntoGround))]
         public class SpewContentsOntoGroundPatchClass
         {
-            [HarmonyPrefix]
-            public static void SpewContentsOntoGroundPrefix(Chest __instance)
+            [HarmonyPostfix]
+            public static void SpewContentsOntoGroundPostfix(Chest __instance)
             {
                 if (GameManager.Instance.CurrentGameType != GameManager.GameType.COOP_2_PLAYER)
                     return;
-
                 if (!JollyCoopManager.gunfig.Enabled(JollyCoopManager.jollyCoopOnStr)
                     || !JollyCoopManager.gunfig.Enabled(JollyCoopManager.itemDistribLockStr)
                     || !JollyCoopManager.gunfig.Enabled(JollyCoopManager.chestItemDoubledStr))
                     return;
 
-                if (playerTwoExclusiveChests.Contains(__instance))
+                playerTwoExclusiveChests.Remove(__instance);
+                playerOneExclusiveChests.Remove(__instance);
+            }
+
+            [HarmonyILManipulator]
+            public static void HandleRoomClearRewardPatch(ILContext ctx)
+            {
+                ILCursor crs = new ILCursor(ctx);
+
+                if (crs.TryGotoNext(MoveType.After,
+                    x => x.MatchCall(typeof(LootEngine), "SpewLoot")))
                 {
-                    foreach (PickupObject pickupObject in __instance.contents)
+                    crs.Emit(OpCodes.Ldarg_0);
+                    crs.Emit(OpCodes.Ldloc_S, (byte)4);
+                    crs.EmitCall<SpewContentsOntoGroundPatchClass>(nameof(SpewContentsOntoGroundPatchClass.SpewContentsOntoGroundPatchCall));
+                }
+            }
+
+            private static List<DebrisObject> SpewContentsOntoGroundPatchCall(List<DebrisObject> orig, Chest self, int i)
+            {
+                if (GameManager.Instance.CurrentGameType != GameManager.GameType.COOP_2_PLAYER)
+                    return orig;
+                if (!JollyCoopManager.gunfig.Enabled(JollyCoopManager.jollyCoopOnStr)
+                    || !JollyCoopManager.gunfig.Enabled(JollyCoopManager.itemDistribLockStr)
+                    || !JollyCoopManager.gunfig.Enabled(JollyCoopManager.chestItemDoubledStr))
+                    return orig;
+
+                if (orig.Count == 0)
+                    return orig;
+                DebrisObject debris = orig[0];
+                if (debris == null)
+                    return orig;
+                PickupObject pickupObject = debris.GetComponentInChildren<PickupObject>();
+                if (pickupObject == null)
+                    return orig;
+
+                if (playerTwoExclusiveChests.Contains(self))
+                {
+                    playerTwoExclusivePickups.Add(
+                        pickupObject, 
+                        GameManager.Instance.PrimaryPlayer.CurrentRoom == GameManager.Instance.Dungeon.data.GetAbsoluteRoomFromPosition(debris.transform.position.IntXY(VectorConversions.Round))
+                    );
+                }
+                else if (playerOneExclusiveChests.Contains(self))
+                {
+                    playerOneExclusivePickups.Add(
+                        pickupObject, 
+                        GameManager.Instance.SecondaryPlayer.CurrentRoom == GameManager.Instance.Dungeon.data.GetAbsoluteRoomFromPosition(debris.transform.position.IntXY(VectorConversions.Round))
+                    );
+                }
+                else 
+                { 
+                    if (!chestOriginalCount.TryGetValue(self, out var count))
+                        return orig;
+
+                    if (i < count)
                     {
-                        playerTwoExclusiveLoots.Add(pickupObject);
+                        playerTwoExclusivePickups.Add(
+                            pickupObject, 
+                            GameManager.Instance.PrimaryPlayer.CurrentRoom == GameManager.Instance.Dungeon.data.GetAbsoluteRoomFromPosition(debris.transform.position.IntXY(VectorConversions.Round))
+                        );
                     }
-                    playerTwoExclusiveChests.Remove(__instance);
+                    else
+                    {
+                        playerOneExclusivePickups.Add(
+                            pickupObject, 
+                            GameManager.Instance.SecondaryPlayer.CurrentRoom == GameManager.Instance.Dungeon.data.GetAbsoluteRoomFromPosition(debris.transform.position.IntXY(VectorConversions.Round))
+                        );
+                    }
                 }
 
-                if (playerOneExclusiveChests.Contains(__instance))
-                {
-                    foreach (PickupObject pickupObject in __instance.contents)
-                    {
-                        playerOneExclusiveLoots.Add(pickupObject);
-                    }
-                    playerOneExclusiveChests.Remove(__instance);
-                }
+                return orig;
             }
         }
 
@@ -1174,4 +1166,3 @@ namespace JollyCoop
         }
     }
 }
-
