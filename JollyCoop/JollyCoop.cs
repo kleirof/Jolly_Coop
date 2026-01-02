@@ -10,7 +10,7 @@ namespace JollyCoop
     {
         public const string GUID = "kleirof.etg.jollycoop";
         public const string NAME = "Jolly Coop";
-        public const string VERSION = "1.3.6";
+        public const string VERSION = "1.3.7";
         public const string TEXT_COLOR = "#00CED1";
 
         public static JollyCoopModule instance;

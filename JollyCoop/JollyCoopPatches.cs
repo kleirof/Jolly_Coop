@@ -154,12 +154,11 @@ namespace JollyCoop
                 }
                 crs.Index = 0;
 
-                if (((Func<bool>)(() =>
-                    crs.TryGotoNext(MoveType.After,
-                    x => x.MatchStloc(2)
-                    ))).TheNthTime(5))
+                if (crs.TryGotoNext(MoveType.After,
+                    x => x.MatchStloc(12)))
                 {
                     crs.Emit(OpCodes.Ldloca_S, (byte)2);
+                    crs.Emit(OpCodes.Ldloc_S, (byte)11);
                     crs.Emit(OpCodes.Ldloc_S, (byte)12);
                     crs.EmitCall<HandleBossClearRewardPatchClass>(nameof(HandleBossClearRewardPatchClass.HandleBossClearRewardPatchCall_2));
                 }
@@ -186,6 +185,7 @@ namespace JollyCoop
                     crs.Emit(OpCodes.Ldarg_0);
                     crs.Emit(OpCodes.Ldloca_S, (byte)2);
                     crs.Emit(OpCodes.Ldloc_S, (byte)10);
+                    crs.Emit(OpCodes.Ldloc_0);
                     crs.EmitCall<HandleBossClearRewardPatchClass>(nameof(HandleBossClearRewardPatchClass.HandleBossClearRewardPatchCall_4));
                 }
                 crs.Index = 0;
@@ -203,17 +203,19 @@ namespace JollyCoop
                 return true;
             }
 
-            private static void HandleBossClearRewardPatchCall_2(ref IntVector2 orig, bool flag2)
+            private static void HandleBossClearRewardPatchCall_2(ref IntVector2 orig, bool flag, bool flag2)
             {
                 orig -= IntVector2.Left;
 
-                if (JollyCoopManager.gunfig.Enabled(JollyCoopManager.jollyCoopOnStr) && JollyCoopManager.gunfig.Enabled(JollyCoopManager.normalBossRewardDoubledStr)
-                && GameManager.Instance.CurrentGameType == GameManager.GameType.COOP_2_PLAYER)
+                if (flag && JollyCoopManager.gunfig.Enabled(JollyCoopManager.jollyCoopOnStr) && JollyCoopManager.gunfig.Enabled(JollyCoopManager.normalBossRewardDoubledStr)
+                    && GameManager.Instance.CurrentGameType == GameManager.GameType.COOP_2_PLAYER)
+                {
                     orig += IntVector2.Left;
+                }
 
                 if (JollyCoopManager.gunfig.Enabled(JollyCoopManager.jollyCoopOnStr) && JollyCoopManager.gunfig.Enabled(JollyCoopManager.masterIndependentStr)
-                && GameManager.Instance.Dungeon.BossMasteryTokenItemId >= 0
-                && GameManager.Instance.CurrentGameType == GameManager.GameType.COOP_2_PLAYER)
+                    && GameManager.Instance.Dungeon.BossMasteryTokenItemId >= 0
+                    && GameManager.Instance.CurrentGameType == GameManager.GameType.COOP_2_PLAYER)
                 {
                     if (!playerOneHasTakenDamageInThisRoom && !playerOneHasGivenMasteryToken)
                     {
@@ -262,7 +264,7 @@ namespace JollyCoop
                 }
             }
 
-            private static bool HandleBossClearRewardPatchCall_4(bool orig, RoomHandler self, ref IntVector2 intVector, RewardPedestal component)
+            private static bool HandleBossClearRewardPatchCall_4(bool orig, RoomHandler self, ref IntVector2 intVector, RewardPedestal component, GlobalDungeonData.ValidTilesets tilesetId)
             {
                 if (GameManager.Instance.CurrentGameType == GameManager.GameType.SINGLE_PLAYER)
                     return orig;
@@ -274,15 +276,22 @@ namespace JollyCoop
                 {
                     playerTwoSpawnMasterFlags[0] = false;
 
+                    bool isForgegeon = tilesetId == GlobalDungeonData.ValidTilesets.FORGEGEON;
                     Dungeon dungeon = GameManager.Instance.Dungeon;
                     if (!playerOneHasTakenDamageInThisRoom)
-                        intVector += new IntVector2(4, 0);
+                    {
+                        if (!isForgegeon)
+                            intVector += new IntVector2(4, 0);
+                        else
+                            intVector += new IntVector2(2, 0);
+                    }
                     else
                     {
                         GameStatsManager.Instance.RegisterStatChange(TrackedStats.MASTERY_TOKENS_RECEIVED, 1f);
                         GameManager.Instance.PrimaryPlayer.MasteryTokensCollectedThisRun++;
                         dungeon.HasGivenMasteryToken = true;
-                        intVector += new IntVector2(2, 0);
+                        if (!isForgegeon)
+                            intVector += new IntVector2(2, 0);
                     }
                     RewardPedestal rewardPedestal4 = RewardPedestal.Spawn(component, intVector, self);
                     dungeon.data[intVector].isOccupied = true;
@@ -295,7 +304,12 @@ namespace JollyCoop
                     rewardPedestal4.MimicGuid = null;
 
                     if (!playerOneHasTakenDamageInThisRoom)
-                        intVector -= new IntVector2(4, 0);
+                    {
+                        if (!isForgegeon)
+                            intVector -= new IntVector2(4, 0);
+                        else
+                            intVector -= new IntVector2(2, 0);
+                    }
 
                     if (JollyCoopManager.gunfig.Enabled(JollyCoopManager.itemDistribLockStr))
                     {
